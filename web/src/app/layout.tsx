@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 import { LocaleProvider } from "@/context/LocaleContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { UserProvider } from "@/context/UserContext";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -48,7 +49,9 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen">
         <ThemeProvider>
-          <LocaleProvider>{children}</LocaleProvider>
+          <LocaleProvider>
+            <UserProvider>{children}</UserProvider>
+          </LocaleProvider>
         </ThemeProvider>
       </body>
     </html>

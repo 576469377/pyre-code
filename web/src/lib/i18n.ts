@@ -114,6 +114,14 @@ const en = {
   continueBtn: 'Continue',
   startBtn: 'Start',
   progress: 'Progress',
+  // user auth
+  login: 'Login',
+  logout: 'Logout',
+  loginPrompt: 'Enter your username',
+  usernamePlaceholder: 'Username (1-32 chars)',
+  loginButton: 'Confirm',
+  cancel: 'Cancel',
+  guest: 'Guest',
 } as const;
 
 type Translations = Record<keyof typeof en, string>;
@@ -220,6 +228,13 @@ const zh: Translations = {
   continueBtn: '继续',
   startBtn: '开始',
   progress: '进度',
+  login: '登录',
+  logout: '退出',
+  loginPrompt: '输入用户名',
+  usernamePlaceholder: '用户名（1-32 个字符）',
+  loginButton: '确认',
+  cancel: '取消',
+  guest: '游客',
 };
 
 export const dictionaries = { en, zh };

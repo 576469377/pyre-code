@@ -38,7 +38,8 @@ def _get_db() -> sqlite3.Connection:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_token TEXT UNIQUE NOT NULL,
+            session_token TEXT UNIQUE,
+            username TEXT UNIQUE,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
@@ -67,6 +68,24 @@ def _get_db() -> sqlite3.Connection:
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
+    # Migrate: add username column if missing (existing DBs)
+    cur = conn.execute("PRAGMA table_info(users)")
+    col_info = cur.fetchall()
+    columns = [row[1] for row in col_info]
+    if "username" not in columns:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("ALTER TABLE users RENAME TO users_old")
+        conn.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_token TEXT UNIQUE,
+                username TEXT UNIQUE,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute("INSERT INTO users (id, session_token, created_at) SELECT id, session_token, created_at FROM users_old")
+        conn.execute("DROP TABLE users_old")
+        conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
     return conn
 
@@ -253,6 +272,10 @@ class UserRequest(BaseModel):
     sessionToken: str
 
 
+class LoginRequest(BaseModel):
+    username: str
+
+
 class ProgressEntry(BaseModel):
     status: str
     bestTimeMs: float | None = None
@@ -261,7 +284,8 @@ class ProgressEntry(BaseModel):
 
 
 class SaveProgressRequest(BaseModel):
-    sessionToken: str
+    sessionToken: str | None = None
+    username: str | None = None
     taskId: str
     status: str
     execTimeMs: float | None = None
@@ -276,6 +300,19 @@ def get_or_create_user(request: UserRequest) -> dict[str, int]:
         if row:
             return {"userId": row[0]}
         cur = conn.execute("INSERT INTO users (session_token) VALUES (?)", (request.sessionToken,))
+        return {"userId": cur.lastrowid}
+
+
+@app.post("/users/login")
+def login(request: LoginRequest) -> dict[str, int]:
+    username = request.username.strip()
+    if not username or len(username) > 32:
+        raise HTTPException(status_code=400, detail="Username must be 1-32 characters")
+    with _get_db() as conn:
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if row:
+            return {"userId": row[0]}
+        cur = conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
         return {"userId": cur.lastrowid}
 
 
@@ -295,7 +332,12 @@ def get_progress(user_id: int) -> dict[str, ProgressEntry]:
 @app.post("/progress")
 def save_progress(request: SaveProgressRequest) -> dict[str, str]:
     with _get_db() as conn:
-        row = conn.execute("SELECT id FROM users WHERE session_token = ?", (request.sessionToken,)).fetchone()
+        if request.username:
+            row = conn.execute("SELECT id FROM users WHERE username = ?", (request.username.strip(),)).fetchone()
+        elif request.sessionToken:
+            row = conn.execute("SELECT id FROM users WHERE session_token = ?", (request.sessionToken,)).fetchone()
+        else:
+            raise HTTPException(status_code=400, detail="username or sessionToken required")
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
         user_id = row[0]

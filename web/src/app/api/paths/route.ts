@@ -6,15 +6,16 @@ import type { LearningPath } from '@/lib/types';
 
 export async function GET() {
   const cookieStore = await cookies();
-  const sessionToken = cookieStore.get('session_token')?.value;
+  const raw = cookieStore.get('pyre_username')?.value;
+  const username = raw ? decodeURIComponent(raw) : undefined;
 
   let progressMap: Record<string, { status: string }> = {};
-  if (sessionToken) {
+  if (username) {
     try {
-      const userRes = await fetch(`${GRADING_SERVICE_URL}/users`, {
+      const userRes = await fetch(`${GRADING_SERVICE_URL}/users/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionToken }),
+        body: JSON.stringify({ username }),
       });
       if (userRes.ok) {
         const { userId } = await userRes.json();
