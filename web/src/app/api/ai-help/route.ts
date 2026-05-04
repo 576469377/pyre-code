@@ -20,6 +20,16 @@ function isRateLimited(ip: string): boolean {
   }
   timestamps.push(now);
   hits.set(ip, timestamps);
+
+  // Periodically prune stale IPs to prevent unbounded growth
+  if (hits.size > 1000) {
+    for (const [key, ts] of hits) {
+      const fresh = ts.filter((t) => now - t < RATE_WINDOW_MS);
+      if (fresh.length === 0) hits.delete(key);
+      else hits.set(key, fresh);
+    }
+  }
+
   return false;
 }
 

@@ -1,5 +1,6 @@
 """FastAPI grading service for torch_judge tasks."""
 
+import signal
 import sqlite3
 import sys
 from pathlib import Path
@@ -11,9 +12,11 @@ import io
 import os
 import threading
 import time
+from collections import defaultdict
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from torch_judge.tasks import get_task
@@ -24,13 +27,78 @@ app = FastAPI(title="Grading Service")
 _stdout_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+_cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Execution timeout
+# ---------------------------------------------------------------------------
+_EXEC_TIMEOUT = int(os.environ.get("EXEC_TIMEOUT_SEC", "30"))
+
+
+class _TimeoutError(Exception):
+    pass
+
+
+def _timeout_handler(signum: int, frame: Any) -> None:
+    raise _TimeoutError("Execution timed out")
+
+
+def _exec_with_timeout(code: str, ns: dict, timeout: int = _EXEC_TIMEOUT) -> None:
+    old = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(timeout)
+    try:
+        exec(code, ns)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
+
+
+# ---------------------------------------------------------------------------
+# Restricted builtins for user code execution
+# ---------------------------------------------------------------------------
+_SAFE_BUILTINS = {
+    k: v for k, v in __builtins__.__dict__.items()  # type: ignore[union-attr]
+    if k not in (
+        "__import__", "open", "eval", "exec", "compile",
+        "breakpoint", "exit", "quit", "input", "globals", "locals",
+        "memoryview", "help",
+    )
+}
+
+# ---------------------------------------------------------------------------
+# Rate limiter (in-memory, per-worker)
+# ---------------------------------------------------------------------------
+_GRADE_RATE_WINDOW = 60
+_GRADE_RATE_MAX = int(os.environ.get("GRADE_RATE_MAX", "30"))
+_grade_hits: dict[str, list[float]] = defaultdict(list)
+
+
+def _is_grade_limited(ip: str) -> bool:
+    now = time.monotonic()
+    timestamps = [t for t in _grade_hits[ip] if now - t < _GRADE_RATE_WINDOW]
+    if len(timestamps) >= _GRADE_RATE_MAX:
+        _grade_hits[ip] = timestamps
+        return True
+    timestamps.append(now)
+    _grade_hits[ip] = timestamps
+    return False
+
+# ---------------------------------------------------------------------------
 # SQLite DB (user sessions + progress)
 # ---------------------------------------------------------------------------
 
 _DB_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent.parent / "data" / "pyre.db"))
 
 
-def _get_db() -> sqlite3.Connection:
+def _init_db() -> None:
     Path(_DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(_DB_PATH)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -87,6 +155,18 @@ def _get_db() -> sqlite3.Connection:
         conn.execute("DROP TABLE users_old")
         conn.execute("PRAGMA foreign_keys=ON")
     conn.commit()
+    conn.close()
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _init_db()
+
+
+def _get_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(_DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -144,6 +224,7 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
     if err:
         return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=err)
     user_ns: dict[str, Any] = {
+        "__builtins__": _SAFE_BUILTINS,
         "torch": torch,
         "Tensor": torch.Tensor,
         "nn": torch.nn,
@@ -152,9 +233,13 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
         "math": math,
     }
     try:
-        exec(code, user_ns)
+        _exec_with_timeout(code, user_ns)
     except SyntaxError as e:
         return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=f"Syntax error: {e}")
+    except _TimeoutError:
+        return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error="Code definition timed out")
+    except Exception as e:
+        return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=f"{type(e).__name__}: {e}")
 
     fn_name = task.get("function_name")
     if fn_name is None:
@@ -189,7 +274,6 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
         }
         test_code = test["code"].replace("{fn}", fn_name)
 
-        # Capture stdout for print output
         output = None
         if capture_output:
             with _stdout_lock:
@@ -197,11 +281,15 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
                 sys.stdout = captured = io.StringIO()
                 try:
                     start = time.perf_counter()
-                    exec(test_code, test_ns)
+                    _exec_with_timeout(test_code, test_ns)
                     exec_time_ms = (time.perf_counter() - start) * 1000
                     output = captured.getvalue() or None
                     results.append(TestResult(name=test["name"], passed=True, execTimeMs=exec_time_ms, output=output))
                     passed += 1
+                except _TimeoutError:
+                    exec_time_ms = (time.perf_counter() - start) * 1000
+                    output = captured.getvalue() or None
+                    results.append(TestResult(name=test["name"], passed=False, execTimeMs=exec_time_ms, error="Execution timed out", output=output))
                 except AssertionError as e:
                     exec_time_ms = (time.perf_counter() - start) * 1000
                     output = captured.getvalue() or None
@@ -215,10 +303,13 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
         else:
             start = time.perf_counter()
             try:
-                exec(test_code, test_ns)
+                _exec_with_timeout(test_code, test_ns)
                 exec_time_ms = (time.perf_counter() - start) * 1000
                 results.append(TestResult(name=test["name"], passed=True, execTimeMs=exec_time_ms))
                 passed += 1
+            except _TimeoutError:
+                exec_time_ms = (time.perf_counter() - start) * 1000
+                results.append(TestResult(name=test["name"], passed=False, execTimeMs=exec_time_ms, error="Execution timed out"))
             except AssertionError as e:
                 exec_time_ms = (time.perf_counter() - start) * 1000
                 results.append(TestResult(name=test["name"], passed=False, execTimeMs=exec_time_ms, error=str(e)))
@@ -231,7 +322,10 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
 
 
 @app.post("/grade", response_model=GradeResponse)
-def grade(request: SubmitRequest) -> GradeResponse:
+def grade(request: SubmitRequest, req: Request) -> GradeResponse:
+    ip = (req.headers.get("x-forwarded-for") or "unknown").split(",")[0].strip()
+    if _is_grade_limited(ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
     task = get_task(request.taskId)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task '{request.taskId}' not found")
@@ -239,7 +333,10 @@ def grade(request: SubmitRequest) -> GradeResponse:
 
 
 @app.post("/run", response_model=GradeResponse)
-def run(request: RunRequest) -> GradeResponse:
+def run(request: RunRequest, req: Request) -> GradeResponse:
+    ip = (req.headers.get("x-forwarded-for") or "unknown").split(",")[0].strip()
+    if _is_grade_limited(ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please wait a moment.")
     task = get_task(request.taskId)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task '{request.taskId}' not found")
@@ -397,5 +494,10 @@ def get_submissions(user_id: int, task_id: str) -> list[dict]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    try:
+        with _get_db() as conn:
+            conn.execute("SELECT 1").fetchone()
+        return {"status": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Tabs from '@radix-ui/react-tabs';
@@ -136,6 +136,11 @@ function WorkspacePageNew() {
     if (!codeReadyRef.current) return;
     saveCodeDraft(id, currentCode);
   }, [id, currentCode]);
+
+  const handleCodeChange = useCallback((code: string) => {
+    setCurrentCode(code);
+    localStorage.setItem(`pyre_code_${id}`, code);
+  }, [id, setCurrentCode]);
 
   const handleRun = async () => {
     if (!problem || isRunning) return;
