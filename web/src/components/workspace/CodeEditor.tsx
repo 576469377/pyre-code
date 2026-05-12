@@ -1,9 +1,15 @@
 'use client';
 
 import { useRef, useEffect } from 'react';
-import Editor, { type OnMount } from '@monaco-editor/react';
+import dynamic from 'next/dynamic';
+import type { OnMount } from '@monaco-editor/react';
 import { appleLight, appleDark } from '@/lib/monacoTheme';
 import { useTheme } from '@/context/ThemeContext';
+
+const Editor = dynamic(() => import('@monaco-editor/react').then((m) => m.default), {
+  ssr: false,
+  loading: () => <div className="h-full w-full bg-bg-sunken animate-pulse" />,
+});
 
 interface CodeEditorProps {
   value: string;

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as Tabs from '@radix-ui/react-tabs';
-import { Menu, ChevronLeft, ChevronRight, Sun, Moon, SwatchBook } from 'lucide-react';
+import { Menu, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
 import { SplitPane, VerticalSplitPane } from '@/components/ui/SplitPane';
 import { ProblemDrawer } from '@/components/layout/ProblemDrawer';
 import { FeedbackModal } from '@/components/workspace/FeedbackModal';
@@ -17,8 +17,6 @@ import { ActionBar } from '@/components/workspace/ActionBar';
 import { useProblemStore } from '@/store/problemStore';
 import { useLocale } from '@/context/LocaleContext';
 import { useTheme } from '@/context/ThemeContext';
-import { useDesign } from '@/context/DesignContext';
-import { WorkspacePageClassic } from '@/components/workspace/WorkspacePage.classic';
 import type { Problem, ProgressMap, SubmissionResult, LearningPath, LearningPathProblemSummary, SubmissionHistory } from '@/lib/types';
 
 function FlameGlyph() {
@@ -35,8 +33,6 @@ function FlameGlyph() {
 }
 
 export default function WorkspacePage() {
-  const { design } = useDesign();
-  if (design === 'classic') return <WorkspacePageClassic />;
   return <WorkspacePageNew />;
 }
 
@@ -47,7 +43,6 @@ function WorkspacePageNew() {
   const pathId = searchParams.get('path');
   const { locale, setLocale, t } = useLocale();
   const { theme, toggleTheme } = useTheme();
-  const { toggleDesign } = useDesign();
   const {
     currentCode, setCurrentCode,
     submissionResult, setSubmissionResult,
@@ -304,15 +299,6 @@ function WorkspacePageNew() {
             </button>
           </div>
         )}
-
-        <button
-          onClick={toggleDesign}
-          className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-text-2 cursor-pointer hover:text-text hover:border-line-strong transition-[color,border-color] duration-150"
-          style={{ border: '1px solid var(--line)', background: 'var(--bg-elev)' }}
-          title="Switch design"
-        >
-          <SwatchBook className="w-3.5 h-3.5" />
-        </button>
 
         <button
           onClick={toggleTheme}

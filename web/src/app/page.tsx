@@ -1,11 +1,8 @@
 'use client';
 
 import { TopNav } from '@/components/layout/TopNav';
-import { TopNav as TopNavClassic } from '@/components/layout/TopNav.classic';
 import { Footer } from '@/components/layout/Footer';
 import { HomeContent } from '@/components/home/HomeContent';
-import { HomeContentClassic } from '@/components/home/HomeContent.classic';
-import { useDesign } from '@/context/DesignContext';
 import problems from '@/lib/problems.json';
 
 function getStats() {
@@ -20,16 +17,6 @@ function getStats() {
 
 export default function HomePage() {
   const stats = getStats();
-  const { design } = useDesign();
-
-  if (design === 'classic') {
-    return (
-      <div className="min-h-screen bg-surface">
-        <TopNavClassic />
-        <HomeContentClassic stats={stats} />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-bg">

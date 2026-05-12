@@ -8,18 +8,10 @@ import { Footer } from '@/components/layout/Footer';
 import { StatusIcon } from '@/components/problem/StatusIcon';
 import { Badge } from '@/components/ui/Badge';
 import { useLocale } from '@/context/LocaleContext';
-import { useDesign } from '@/context/DesignContext';
-import { ProblemsPageClassic } from '@/components/problems/ProblemsPage.classic';
 import { cn } from '@/lib/utils';
 import type { Problem, ProgressMap } from '@/lib/types';
 
 export default function ProblemsPage() {
-  const { design } = useDesign();
-  if (design === 'classic') return <ProblemsPageClassic />;
-  return <ProblemsPageNew />;
-}
-
-function ProblemsPageNew() {
   const { locale, t } = useLocale();
   const [problems, setProblems] = useState<Problem[]>([]);
   const [progress, setProgress] = useState<ProgressMap>({});

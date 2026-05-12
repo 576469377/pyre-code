@@ -4,55 +4,55 @@
 
 @layer base {
   :root {
-    --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
-    --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, var(--font-noto-sc), sans-serif;
+    --font-mono: var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, monospace;
 
-    --bg:          oklch(0.992 0.003 85);
-    --bg-elev:     oklch(1.000 0 0);
-    --bg-sunken:   oklch(0.975 0.004 85);
-    --bg-code:     oklch(0.985 0.004 85);
-    --line:        oklch(0.915 0.005 85);
-    --line-strong: oklch(0.86 0.006 85);
-    --text:        oklch(0.20 0.008 80);
-    --text-2:      oklch(0.45 0.010 80);
-    --text-3:      oklch(0.62 0.010 80);
-    --accent:      #007aff;
-    --accent-ink:  #005bd1;
-    --accent-wash: color-mix(in oklab, #007aff 8%, var(--bg));
-    --accent-line: color-mix(in oklab, #007aff 22%, var(--line));
-    --easy:        oklch(0.66 0.14 150);
-    --medium:      oklch(0.72 0.14 70);
-    --hard:        oklch(0.62 0.18 25);
+    --bg:          #f8fafc;
+    --bg-elev:     #ffffff;
+    --bg-sunken:   #f1f5f9;
+    --bg-code:     #f1f5f9;
+    --line:        #e2e8f0;
+    --line-strong: #cbd5e1;
+    --text:        #0f172a;
+    --text-2:      #475569;
+    --text-3:      #94a3b8;
+    --accent:      #3b82f6;
+    --accent-ink:  #2563eb;
+    --accent-wash: color-mix(in oklab, #3b82f6 8%, var(--bg));
+    --accent-line: color-mix(in oklab, #3b82f6 22%, var(--line));
+    --easy:        #10b981;
+    --medium:      #f59e0b;
+    --hard:        #ef4444;
 
-    --code-keyword: #007aff;
-    --code-string:  #34c759;
-    --code-comment: #aeaeb2;
-    --code-number:  #ff9500;
-    --code-builtin: #af52de;
-    --code-func:    #ff9500;
+    --code-keyword: #3b82f6;
+    --code-string:  #10b981;
+    --code-comment: #94a3b8;
+    --code-number:  #f59e0b;
+    --code-builtin: #8b5cf6;
+    --code-func:    #f59e0b;
   }
 
   [data-theme="dark"] {
-    --bg:          oklch(0.145 0.006 85);
-    --bg-elev:     oklch(0.175 0.006 85);
-    --bg-sunken:   oklch(0.125 0.006 85);
-    --bg-code:     oklch(0.185 0.006 85);
-    --line:        oklch(0.265 0.008 85);
-    --line-strong: oklch(0.34 0.010 85);
-    --text:        oklch(0.96 0.004 85);
-    --text-2:      oklch(0.72 0.008 85);
-    --text-3:      oklch(0.55 0.010 85);
-    --accent:      #4ea1ff;
-    --accent-ink:  #8cc0ff;
-    --accent-wash: color-mix(in oklab, #4ea1ff 14%, var(--bg));
-    --accent-line: color-mix(in oklab, #4ea1ff 28%, var(--line));
-    --easy:        oklch(0.74 0.14 150);
-    --medium:      oklch(0.80 0.13 70);
-    --hard:        oklch(0.72 0.16 25);
+    --bg:          #0f172a;
+    --bg-elev:     #1e293b;
+    --bg-sunken:   #020617;
+    --bg-code:     #1e293b;
+    --line:        #334155;
+    --line-strong: #475569;
+    --text:        #f1f5f9;
+    --text-2:      #94a3b8;
+    --text-3:      #64748b;
+    --accent:      #60a5fa;
+    --accent-ink:  #93c5fd;
+    --accent-wash: color-mix(in oklab, #60a5fa 14%, var(--bg));
+    --accent-line: color-mix(in oklab, #60a5fa 28%, var(--line));
+    --easy:        #34d399;
+    --medium:      #fbbf24;
+    --hard:        #f87171;
 
-    --code-keyword: #4ea1ff;
-    --code-string:  #4ade80;
-    --code-comment: #6b7280;
+    --code-keyword: #60a5fa;
+    --code-string:  #34d399;
+    --code-comment: #64748b;
     --code-number:  #fbbf24;
     --code-builtin: #c084fc;
     --code-func:    #fbbf24;
@@ -104,31 +104,9 @@
 /* Scrollbars */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 
-/* Classic design: map CSS vars to classic palette */
-[data-design="classic"] {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
-  --bg:          #fafafa;
-  --bg-elev:     #ffffff;
-  --bg-sunken:   #f5f5f5;
-  --bg-code:     #f5f5f5;
-  --line:        #e5e5e5;
-  --line-strong: #d4d4d4;
-  --text:        #1d1d1f;
-  --text-2:      #6e6e73;
-  --text-3:      #aeaeb2;
-  --accent:      #007aff;
-  --accent-ink:  #0062cc;
-  --accent-wash: rgba(0,122,255,0.06);
-  --accent-line: rgba(0,122,255,0.18);
-  --easy:        #34c759;
-  --medium:      #ff9500;
-  --hard:        #ff3b30;
-}
-
 @layer components {
   .glass {
-    @apply bg-white/80 backdrop-blur-lg border-b border-border/50;
+    @apply bg-white/80 backdrop-blur-lg border-b border-line/50;
   }
 }
 *::-webkit-scrollbar-thumb {
