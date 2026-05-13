@@ -1,5 +1,6 @@
 """FastAPI grading service for torch_judge tasks."""
 
+import logging
 import signal
 import sqlite3
 import sys
@@ -20,6 +21,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from torch_judge.tasks import get_task
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger("grading")
 
 app = FastAPI(title="Grading Service")
 
@@ -161,6 +168,7 @@ def _init_db() -> None:
 @app.on_event("startup")
 def _on_startup() -> None:
     _init_db()
+    logger.info("Grading service started (DB=%s, exec_timeout=%ds, rate_max=%d/min)", _DB_PATH, _EXEC_TIMEOUT, _GRADE_RATE_MAX)
 
 
 def _get_db() -> sqlite3.Connection:
@@ -237,8 +245,10 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
     except SyntaxError as e:
         return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=f"Syntax error: {e}")
     except _TimeoutError:
+        logger.warning("User code definition timed out")
         return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error="Code definition timed out")
     except Exception as e:
+        logger.info("User code raised at definition: %s: %s", type(e).__name__, e)
         return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=f"{type(e).__name__}: {e}")
 
     fn_name = task.get("function_name")
@@ -499,5 +509,6 @@ def health() -> dict[str, str]:
             conn.execute("SELECT 1").fetchone()
         return {"status": "ok"}
     except Exception as e:
+        logger.error("Health check failed: %s", e)
         raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
 

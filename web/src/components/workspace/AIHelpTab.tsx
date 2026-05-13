@@ -173,6 +173,7 @@ export function AIHelpTab({ problem }: AIHelpTabProps) {
                     style={inputStyle}
                     placeholder="sk-..."
                   />
+                  <span className="block text-[11px] leading-snug text-text-3">{t('aiHelpKeyWarning')}</span>
                 </label>
                 <label className="block space-y-1">
                   <span className="text-xs font-medium text-text-2">{t('aiHelpModel')}</span>

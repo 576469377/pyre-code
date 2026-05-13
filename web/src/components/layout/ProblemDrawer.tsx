@@ -36,7 +36,11 @@ export function ProblemDrawer({ open, onClose, problems, progress, currentId }: 
       >
         <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--line)' }}>
           <span className="font-semibold text-sm tracking-tight">{t('problems')}</span>
-          <button onClick={onClose} className="p-1 rounded-lg text-text-2 hover:text-text transition-colors">
+          <button
+            onClick={onClose}
+            aria-label={t('closeDrawer')}
+            className="p-1 rounded-lg text-text-2 hover:text-text transition-colors"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>

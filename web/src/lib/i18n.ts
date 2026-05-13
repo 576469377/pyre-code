@@ -89,6 +89,7 @@ const en = {
   aiHelpRequestFailed: 'AI request failed.',
   aiHelpSafetyNote: 'The assistant is instructed to give hints and debugging guidance, not a full answer.',
   aiHelpServerConfigured: 'Using server-configured AI endpoint.',
+  aiHelpKeyWarning: 'API key is stored in this browser (localStorage). For shared or untrusted machines, set AI_HELP_API_KEY in .env instead.',
   // hero meta
   metaTotal: 'Total',
   metaCoverage: 'Coverage',
@@ -114,6 +115,9 @@ const en = {
   continueBtn: 'Continue',
   startBtn: 'Start',
   progress: 'Progress',
+  // a11y
+  closeDrawer: 'Close problem list',
+  openDrawer: 'Open problem list',
   // user auth
   login: 'Login',
   logout: 'Logout',
@@ -207,6 +211,7 @@ const zh: Translations = {
   aiHelpRequestFailed: 'AI 请求失败。',
   aiHelpSafetyNote: '助手被要求优先给提示和排查思路，而不是直接给完整答案。',
   aiHelpServerConfigured: '已使用服务端配置的 AI 接口。',
+  aiHelpKeyWarning: 'API Key 保存在本浏览器的 localStorage 中。共享或不受信任的机器建议改用 .env 里的 AI_HELP_API_KEY。',
   metaTotal: '总计',
   metaCoverage: '覆盖',
   metaRuntime: '运行环境',
@@ -228,6 +233,8 @@ const zh: Translations = {
   continueBtn: '继续',
   startBtn: '开始',
   progress: '进度',
+  closeDrawer: '关闭题目列表',
+  openDrawer: '打开题目列表',
   login: '登录',
   logout: '退出',
   loginPrompt: '输入用户名',

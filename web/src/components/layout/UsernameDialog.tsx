@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/context/UserContext';
 import { useLocale } from '@/context/LocaleContext';
@@ -16,6 +16,15 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
   const router = useRouter();
   const [value, setValue] = useState('');
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -30,9 +39,20 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl p-6 w-80">
-        <h2 className="text-lg font-semibold text-text-primary mb-2">{t('loginPrompt')}</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="username-dialog-title"
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl p-6 w-80"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="username-dialog-title" className="text-lg font-semibold text-text-primary mb-2">
+          {t('loginPrompt')}
+        </h2>
         <form onSubmit={handleSubmit}>
           <input
             type="text"
@@ -41,6 +61,7 @@ export function UsernameDialog({ open, onClose }: UsernameDialogProps) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={t('usernamePlaceholder')}
+            aria-label={t('usernamePlaceholder')}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent/40 mb-4"
           />
           <div className="flex gap-2 justify-end">

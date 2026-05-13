@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { PythonCode } from '@/lib/pythonHighlight';
 
 interface MarkdownContentProps {
@@ -117,7 +117,7 @@ function renderCodeBlock(language: string, content: string) {
 }
 
 export function MarkdownContent({ content }: MarkdownContentProps) {
-  const blocks = parseBlocks(content);
+  const blocks = useMemo(() => parseBlocks(content), [content]);
 
   return (
     <div className="space-y-4">

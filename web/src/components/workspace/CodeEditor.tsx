@@ -3,6 +3,7 @@
 import { useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { OnMount } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
 import { appleLight, appleDark } from '@/lib/monacoTheme';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -30,7 +31,7 @@ export function CodeEditor({
   onRunShortcut,
   onSubmitShortcut,
 }: CodeEditorProps) {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<any>(null);
   const runRef = useRef(onRunShortcut);
   const submitRef = useRef(onSubmitShortcut);
