@@ -36,6 +36,7 @@ dev = [
     "build",
     "twine",
     "pytest",
+    "httpx",
 ]
 
 [tool.setuptools.packages.find]

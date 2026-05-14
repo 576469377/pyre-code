@@ -59,20 +59,29 @@ def _timeout_handler(signum: int, frame: Any) -> None:
 
 
 def _exec_with_timeout(code: str, ns: dict, timeout: int = _EXEC_TIMEOUT) -> None:
-    old = signal.signal(signal.SIGALRM, _timeout_handler)
-    signal.alarm(timeout)
-    try:
+    # signal.alarm only works in the main thread. FastAPI runs sync endpoints
+    # in a worker thread, so fall back to plain exec there. Timeout protection
+    # still applies when called from the main thread (e.g. tests).
+    import threading
+    if threading.current_thread() is threading.main_thread():
+        old = signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(timeout)
+        try:
+            exec(code, ns)
+        finally:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, old)
+    else:
         exec(code, ns)
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old)
 
 
 # ---------------------------------------------------------------------------
 # Restricted builtins for user code execution
 # ---------------------------------------------------------------------------
+import builtins as _builtins
+
 _SAFE_BUILTINS = {
-    k: v for k, v in __builtins__.__dict__.items()  # type: ignore[union-attr]
+    k: v for k, v in vars(_builtins).items()
     if k not in (
         "__import__", "open", "eval", "exec", "compile",
         "breakpoint", "exit", "quit", "input", "globals", "locals",

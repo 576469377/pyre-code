@@ -1,0 +1,41 @@
+"""End-to-end tests for /grade and /run using the relu task."""
+from grading_service.tests.conftest import correct_relu_solution
+
+
+def test_grade_correct_solution_passes_all(client):
+    resp = client.post("/grade", json={"taskId": "relu", "code": correct_relu_solution()})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["allPassed"] is True
+    assert body["passed"] == body["total"] > 0
+    assert body["error"] is None
+
+
+def test_grade_missing_function_returns_error(client):
+    resp = client.post("/grade", json={"taskId": "relu", "code": "def other(x): return x"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["allPassed"] is False
+    assert "relu" in (body["error"] or "")
+
+
+def test_grade_syntax_error_surfaces(client):
+    resp = client.post("/grade", json={"taskId": "relu", "code": "def relu(:\n  return x"})
+    assert resp.status_code == 200
+    assert "Syntax error" in (resp.json()["error"] or "")
+
+
+def test_grade_unknown_task_returns_404(client):
+    resp = client.post("/grade", json={"taskId": "no_such_task", "code": "def f(): pass"})
+    assert resp.status_code == 404
+
+
+def test_run_with_test_indices_runs_subset(client):
+    resp = client.post(
+        "/run",
+        json={"taskId": "relu", "code": correct_relu_solution(), "testIndices": [0]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["allPassed"] is True
