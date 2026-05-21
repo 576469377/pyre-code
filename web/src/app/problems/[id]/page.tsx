@@ -19,6 +19,7 @@ import { useLocale } from '@/context/LocaleContext';
 import { useTheme } from '@/context/ThemeContext';
 import type { Problem, ProgressMap, SubmissionResult, LearningPath, LearningPathProblemSummary, SubmissionHistory } from '@/lib/types';
 import { loadCodeDraft, saveCodeDraft } from '@/lib/codeDraft';
+import { safeFetchJson } from '@/lib/safeFetch';
 
 function FlameGlyph() {
   return (
@@ -55,6 +56,7 @@ function WorkspacePageNew() {
   } = useProblemStore();
 
   const [problem, setProblem] = useState<(Problem & { starterCode?: string }) | null>(null);
+  const [problemError, setProblemError] = useState(false);
   const [allProblems, setAllProblems] = useState<Problem[]>([]);
   const [progress, setProgress] = useState<ProgressMap>({});
   const [pathData, setPathData] = useState<(Omit<LearningPath, 'problems'> & { problems: LearningPathProblemSummary[] }) | null>(null);
@@ -63,31 +65,38 @@ function WorkspacePageNew() {
 
   useEffect(() => {
     codeReadyRef.current = false;
-    fetch(`/api/problems/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setProblem(data);
-        const cachedCode = loadCodeDraft(id);
-        setCurrentCode(cachedCode ?? data.starterCode ?? '');
-        codeReadyRef.current = true;
-        setSubmissionResult(null);
-        resetTestPanel();
-        resetAiHelp();
-      });
-    fetch('/api/problems')
-      .then((r) => r.json())
-      .then((d) => setAllProblems(d.problems));
-    fetch('/api/progress')
-      .then((r) => r.json())
-      .then((d) => setProgress(d.progress || {}));
-    fetch(`/api/submissions/${id}`)
-      .then((r) => r.json())
-      .then((d: SubmissionHistory[]) => setSubmissionHistory(d))
-      .catch(() => {});
+    setProblemError(false);
+
+    safeFetchJson<Problem & { starterCode?: string }>(`/api/problems/${id}`).then((data) => {
+      if (!data) {
+        setProblemError(true);
+        return;
+      }
+      setProblem(data);
+      const cachedCode = loadCodeDraft(id);
+      setCurrentCode(cachedCode ?? data.starterCode ?? '');
+      codeReadyRef.current = true;
+      setSubmissionResult(null);
+      resetTestPanel();
+      resetAiHelp();
+    });
+
+    safeFetchJson<{ problems: Problem[] }>('/api/problems').then((d) => {
+      if (d?.problems) setAllProblems(d.problems);
+    });
+
+    safeFetchJson<{ progress: ProgressMap }>('/api/progress').then((d) => {
+      setProgress(d?.progress ?? {});
+    });
+
+    safeFetchJson<SubmissionHistory[]>(`/api/submissions/${id}`).then((d) => {
+      if (d) setSubmissionHistory(d);
+    });
+
     if (pathId) {
-      fetch(`/api/paths/${pathId}`)
-        .then((r) => r.json())
-        .then((d) => setPathData(d));
+      safeFetchJson<Omit<LearningPath, 'problems'> & { problems: LearningPathProblemSummary[] }>(`/api/paths/${pathId}`).then((d) => {
+        if (d) setPathData(d);
+      });
     } else {
       setPathData(null);
     }
@@ -178,8 +187,12 @@ function WorkspacePageNew() {
       setRunResult(data);
       setBottomTab('testresults');
       setFeedbackResult(data);
-      fetch('/api/progress').then((r) => r.json()).then((d) => setProgress(d.progress || {}));
-      fetch(`/api/submissions/${id}`).then((r) => r.json()).then((d: SubmissionHistory[]) => setSubmissionHistory(d)).catch(() => {});
+      safeFetchJson<{ progress: ProgressMap }>('/api/progress').then((d) => {
+        setProgress(d?.progress ?? {});
+      });
+      safeFetchJson<SubmissionHistory[]>(`/api/submissions/${id}`).then((d) => {
+        if (d) setSubmissionHistory(d);
+      });
     } catch {
       const err = { passed: 0, total: 0, allPassed: false, results: [], totalTimeMs: 0, error: t('networkError') };
       setSubmissionResult(err);
@@ -204,6 +217,31 @@ function WorkspacePageNew() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleRun, handleSubmit, isRunning, isSubmitting]);
+
+  if (problemError) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-bg p-6">
+        <div className="text-center max-w-sm">
+          <div
+            className="w-12 h-12 mx-auto mb-4 rounded-xl flex items-center justify-center text-2xl"
+            style={{ background: 'var(--bg-sunken)', border: '1px solid var(--line)' }}
+          >
+            ⚠️
+          </div>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-2)' }}>
+            {t('networkError')}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-lg text-sm font-medium text-white cursor-pointer"
+            style={{ background: 'var(--accent)' }}
+          >
+            {t('reload')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!problem) {
     return (

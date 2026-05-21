@@ -447,53 +447,67 @@ def get_progress(user_id: int) -> dict[str, ProgressEntry]:
 
 @app.post("/progress")
 def save_progress(request: SaveProgressRequest) -> dict[str, str]:
-    with _get_db() as conn:
-        if request.username:
-            row = conn.execute("SELECT id FROM users WHERE username = ?", (request.username.strip(),)).fetchone()
-        elif request.sessionToken:
-            row = conn.execute("SELECT id FROM users WHERE session_token = ?", (request.sessionToken,)).fetchone()
-        else:
-            raise HTTPException(status_code=400, detail="username or sessionToken required")
-        if not row:
-            raise HTTPException(status_code=404, detail="User not found")
-        user_id = row[0]
-        existing = conn.execute(
-            "SELECT status, best_time_ms FROM progress WHERE user_id = ? AND task_id = ?",
-            (user_id, request.taskId)
-        ).fetchone()
-        if existing:
-            existing_status, existing_best_time = existing
-            if request.status == "solved":
-                if existing_best_time is not None and request.execTimeMs is not None:
-                    best = min(existing_best_time, request.execTimeMs)
+    try:
+        with _get_db() as conn:
+            if request.username:
+                row = conn.execute("SELECT id FROM users WHERE username = ?", (request.username.strip(),)).fetchone()
+            elif request.sessionToken:
+                row = conn.execute("SELECT id FROM users WHERE session_token = ?", (request.sessionToken,)).fetchone()
+            else:
+                raise HTTPException(status_code=400, detail="username or sessionToken required")
+            if not row:
+                raise HTTPException(status_code=404, detail="User not found")
+            user_id = row[0]
+            existing = conn.execute(
+                "SELECT status FROM progress WHERE user_id = ? AND task_id = ?",
+                (user_id, request.taskId)
+            ).fetchone()
+            if existing:
+                existing_status = existing[0]
+                if request.status == "solved":
+                    # Atomic min() to avoid races when concurrent submissions arrive.
+                    conn.execute(
+                        """
+                        UPDATE progress
+                        SET status = 'solved',
+                            best_time_ms = CASE
+                                WHEN best_time_ms IS NULL THEN ?
+                                WHEN ? IS NULL THEN best_time_ms
+                                ELSE MIN(best_time_ms, ?)
+                            END,
+                            attempts = attempts + 1,
+                            solved_at = COALESCE(solved_at, datetime('now'))
+                        WHERE user_id = ? AND task_id = ?
+                        """,
+                        (request.execTimeMs, request.execTimeMs, request.execTimeMs, user_id, request.taskId)
+                    )
                 else:
-                    best = existing_best_time if existing_best_time is not None else request.execTimeMs
-                conn.execute(
-                    "UPDATE progress SET status = ?, best_time_ms = ?, attempts = attempts + 1, solved_at = COALESCE(solved_at, datetime('now')) WHERE user_id = ? AND task_id = ?",
-                    ("solved", best, user_id, request.taskId)
-                )
+                    next_status = existing_status if existing_status == "solved" and request.status in ("todo", "attempted") else request.status
+                    conn.execute(
+                        "UPDATE progress SET status = ?, attempts = attempts + 1 WHERE user_id = ? AND task_id = ?",
+                        (next_status, user_id, request.taskId)
+                    )
             else:
-                next_status = existing_status if existing_status == "solved" and request.status in ("todo", "attempted") else request.status
+                if request.status == "solved":
+                    conn.execute(
+                        "INSERT INTO progress (user_id, task_id, status, best_time_ms, attempts, solved_at) VALUES (?, ?, ?, ?, 1, datetime('now'))",
+                        (user_id, request.taskId, request.status, request.execTimeMs)
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO progress (user_id, task_id, status, best_time_ms, attempts, solved_at) VALUES (?, ?, ?, ?, 1, NULL)",
+                        (user_id, request.taskId, request.status, None)
+                    )
+            if request.code is not None:
                 conn.execute(
-                    "UPDATE progress SET status = ?, attempts = attempts + 1 WHERE user_id = ? AND task_id = ?",
-                    (next_status, user_id, request.taskId)
+                    "INSERT INTO submissions (user_id, task_id, code, passed, exec_time_ms) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, request.taskId, request.code, 1 if request.allPassed else 0, request.execTimeMs)
                 )
-        else:
-            if request.status == "solved":
-                conn.execute(
-                    "INSERT INTO progress (user_id, task_id, status, best_time_ms, attempts, solved_at) VALUES (?, ?, ?, ?, 1, datetime('now'))",
-                    (user_id, request.taskId, request.status, request.execTimeMs)
-                )
-            else:
-                conn.execute(
-                    "INSERT INTO progress (user_id, task_id, status, best_time_ms, attempts, solved_at) VALUES (?, ?, ?, ?, 1, NULL)",
-                    (user_id, request.taskId, request.status, None)
-                )
-        if request.code is not None:
-            conn.execute(
-                "INSERT INTO submissions (user_id, task_id, code, passed, exec_time_ms) VALUES (?, ?, ?, ?, ?)",
-                (user_id, request.taskId, request.code, 1 if request.allPassed else 0, request.execTimeMs)
-            )
+    except HTTPException:
+        raise
+    except sqlite3.Error as e:
+        logger.error("save_progress DB error: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to save progress")
     return {"ok": "true"}
 
 
