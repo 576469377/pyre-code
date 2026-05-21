@@ -26,7 +26,3 @@ def client(app_module):
     """TestClient wrapping the freshly-imported app. `with` triggers startup events."""
     with TestClient(app_module.app) as c:
         yield c
-
-
-def correct_relu_solution() -> str:
-    return "def relu(x):\n    return x * (x > 0).float()\n"

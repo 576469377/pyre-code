@@ -1,9 +1,10 @@
 """End-to-end tests for /grade and /run using the relu task."""
-from grading_service.tests.conftest import correct_relu_solution
+
+RELU_SOLUTION = "def relu(x):\n    return x * (x > 0).float()\n"
 
 
 def test_grade_correct_solution_passes_all(client):
-    resp = client.post("/grade", json={"taskId": "relu", "code": correct_relu_solution()})
+    resp = client.post("/grade", json={"taskId": "relu", "code": RELU_SOLUTION})
     assert resp.status_code == 200
     body = resp.json()
     assert body["allPassed"] is True
@@ -33,7 +34,7 @@ def test_grade_unknown_task_returns_404(client):
 def test_run_with_test_indices_runs_subset(client):
     resp = client.post(
         "/run",
-        json={"taskId": "relu", "code": correct_relu_solution(), "testIndices": [0]},
+        json={"taskId": "relu", "code": RELU_SOLUTION, "testIndices": [0]},
     )
     assert resp.status_code == 200
     body = resp.json()
