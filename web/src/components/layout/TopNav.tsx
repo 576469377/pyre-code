@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { useLocale } from '@/context/LocaleContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
-import { UsernameDialog } from '@/components/layout/UsernameDialog';
+import { AuthDialog } from '@/components/layout/AuthDialog';
 
 interface TopNavProps {
   solvedCount?: number;
@@ -167,7 +167,7 @@ export function TopNav({ solvedCount, totalCount }: TopNavProps) {
           </div>
         </div>
       </nav>
-      <UsernameDialog open={showLogin} onClose={() => setShowLogin(false)} />
+      <AuthDialog open={showLogin} onClose={() => setShowLogin(false)} />
     </>
   );
 }

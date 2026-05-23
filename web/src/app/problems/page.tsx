@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Search } from 'lucide-react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Footer } from '@/components/layout/Footer';
+import { AuthGuard } from '@/components/layout/AuthGuard';
 import { StatusIcon } from '@/components/problem/StatusIcon';
 import { Badge } from '@/components/ui/Badge';
 import { useLocale } from '@/context/LocaleContext';
@@ -59,6 +60,7 @@ export default function ProblemsPage() {
   });
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-bg">
       <TopNav solvedCount={solvedCount} totalCount={problems.length} />
       <main className="max-w-[1280px] mx-auto px-7 pt-8 pb-20">
@@ -233,5 +235,6 @@ export default function ProblemsPage() {
       </main>
       <Footer />
     </div>
+    </AuthGuard>
   );
 }

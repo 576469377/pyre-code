@@ -124,6 +124,7 @@ def _init_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_token TEXT UNIQUE,
             username TEXT UNIQUE,
+            password_hash TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
@@ -164,12 +165,15 @@ def _init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_token TEXT UNIQUE,
                 username TEXT UNIQUE,
+                password_hash TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
         conn.execute("INSERT INTO users (id, session_token, created_at) SELECT id, session_token, created_at FROM users_old")
         conn.execute("DROP TABLE users_old")
         conn.execute("PRAGMA foreign_keys=ON")
+    elif "password_hash" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
     conn.commit()
     conn.close()
 
@@ -390,6 +394,7 @@ class UserRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str
+    password: str
 
 
 class ProgressEntry(BaseModel):
@@ -420,21 +425,72 @@ def get_or_create_user(request: UserRequest) -> dict[str, int]:
 
 
 @app.post("/users/login")
-def login(request: LoginRequest) -> dict[str, int]:
+def login(request: LoginRequest) -> dict[str, int | str]:
+    import bcrypt
     username = request.username.strip()
     if not username or len(username) > 32:
         raise HTTPException(status_code=400, detail="Username must be 1-32 characters")
+    if not request.password or len(request.password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     with _get_db() as conn:
-        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        row = conn.execute("SELECT id, password_hash FROM users WHERE username = ?", (username,)).fetchone()
         if row:
-            return {"userId": row[0]}
-        cur = conn.execute("INSERT INTO users (username) VALUES (?)", (username,))
-        return {"userId": cur.lastrowid}
+            uid, stored_hash = row
+            if not stored_hash:
+                raise HTTPException(status_code=401, detail="Account has no password set. Please contact admin.")
+            if not bcrypt.checkpw(request.password.encode(), stored_hash.encode()):
+                raise HTTPException(status_code=401, detail="Invalid password")
+            return {"userId": uid, "username": username}
+        raise HTTPException(status_code=401, detail="User not found. Please register first.")
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/users/register")
+def register(request: RegisterRequest) -> dict[str, int | str]:
+    import bcrypt
+    username = request.username.strip()
+    if not username or len(username) > 32:
+        raise HTTPException(status_code=400, detail="Username must be 1-32 characters")
+    if not request.password or len(request.password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    password_hash = bcrypt.hashpw(request.password.encode(), bcrypt.gensalt()).decode()
+    with _get_db() as conn:
+        existing = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Username already taken")
+        cur = conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            (username, password_hash)
+        )
+        return {"userId": cur.lastrowid, "username": username}
 
 
 @app.get("/progress/{user_id}")
 def get_progress(user_id: int) -> dict[str, ProgressEntry]:
     with _get_db() as conn:
+        rows = conn.execute(
+            "SELECT task_id, status, best_time_ms, attempts, solved_at FROM progress WHERE user_id = ?",
+            (user_id,)
+        ).fetchall()
+    return {
+        row[0]: ProgressEntry(status=row[1], bestTimeMs=row[2], attempts=row[3], solvedAt=row[4])
+        for row in rows
+    }
+
+
+@app.get("/progress/by-username/{username}")
+def get_progress_by_username(username: str) -> dict[str, ProgressEntry]:
+    """Lookup progress by username — used by frontend api routes that already
+    verified the user via the auth cookie. No password check here."""
+    with _get_db() as conn:
+        row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not row:
+            return {}
+        user_id = row[0]
         rows = conn.execute(
             "SELECT task_id, status, best_time_ms, attempts, solved_at FROM progress WHERE user_id = ?",
             (user_id,)
@@ -518,6 +574,25 @@ def get_submissions(user_id: int, task_id: str) -> list[dict]:
             "SELECT id, passed, exec_time_ms, submitted_at, code FROM submissions "
             "WHERE user_id = ? AND task_id = ? ORDER BY submitted_at DESC LIMIT 50",
             (user_id, task_id)
+        ).fetchall()
+    return [
+        {"id": r[0], "passed": bool(r[1]), "execTimeMs": r[2], "submittedAt": r[3], "code": r[4]}
+        for r in rows
+    ]
+
+
+@app.get("/submissions/by-username/{username}/{task_id}")
+def get_submissions_by_username(username: str, task_id: str) -> list[dict]:
+    """Lookup submission history by username — used by frontend api routes that
+    already verified the user via the auth cookie. No password check here."""
+    with _get_db() as conn:
+        user_row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not user_row:
+            return []
+        rows = conn.execute(
+            "SELECT id, passed, exec_time_ms, submitted_at, code FROM submissions "
+            "WHERE user_id = ? AND task_id = ? ORDER BY submitted_at DESC LIMIT 50",
+            (user_row[0], task_id)
         ).fetchall()
     return [
         {"id": r[0], "passed": bool(r[1]), "execTimeMs": r[2], "submittedAt": r[3], "code": r[4]}

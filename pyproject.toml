@@ -29,6 +29,7 @@ dependencies = [
     "torch",
     "numpy",
     "pydantic",
+    "bcrypt",
 ]
 
 [project.optional-dependencies]

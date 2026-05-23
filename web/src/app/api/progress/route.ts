@@ -11,15 +11,7 @@ export async function GET() {
     return NextResponse.json({ progress: {} });
   }
 
-  const userRes = await fetch(`${GRADING_SERVICE_URL}/users/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
-  });
-  if (!userRes.ok) return NextResponse.json({ progress: {} });
-
-  const { userId } = await userRes.json();
-  const progressRes = await fetch(`${GRADING_SERVICE_URL}/progress/${userId}`);
+  const progressRes = await fetch(`${GRADING_SERVICE_URL}/progress/by-username/${encodeURIComponent(username)}`);
   if (!progressRes.ok) return NextResponse.json({ progress: {} });
 
   const progress = await progressRes.json();

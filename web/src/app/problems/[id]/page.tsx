@@ -17,6 +17,8 @@ import { ActionBar } from '@/components/workspace/ActionBar';
 import { useProblemStore } from '@/store/problemStore';
 import { useLocale } from '@/context/LocaleContext';
 import { useTheme } from '@/context/ThemeContext';
+import { useUser } from '@/context/UserContext';
+import { AuthDialog } from '@/components/layout/AuthDialog';
 import type { Problem, ProgressMap, SubmissionResult, LearningPath, LearningPathProblemSummary, SubmissionHistory } from '@/lib/types';
 import { loadCodeDraft, saveCodeDraft } from '@/lib/codeDraft';
 import { safeFetchJson } from '@/lib/safeFetch';
@@ -35,6 +37,8 @@ function FlameGlyph() {
 }
 
 export default function WorkspacePage() {
+  const { username } = useUser();
+  if (!username) return <AuthDialog open={true} />;
   return <WorkspacePageNew />;
 }
 

@@ -12,16 +12,8 @@ export async function GET() {
   let progressMap: Record<string, { status: string }> = {};
   if (username) {
     try {
-      const userRes = await fetch(`${GRADING_SERVICE_URL}/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username }),
-      });
-      if (userRes.ok) {
-        const { userId } = await userRes.json();
-        const progressRes = await fetch(`${GRADING_SERVICE_URL}/progress/${userId}`);
-        if (progressRes.ok) progressMap = await progressRes.json();
-      }
+      const progressRes = await fetch(`${GRADING_SERVICE_URL}/progress/by-username/${encodeURIComponent(username)}`);
+      if (progressRes.ok) progressMap = await progressRes.json();
     } catch {
       // continue without progress
     }
