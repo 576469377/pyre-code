@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Footer } from '@/components/layout/Footer';
@@ -9,11 +10,14 @@ import { AuthGuard } from '@/components/layout/AuthGuard';
 import { StatusIcon } from '@/components/problem/StatusIcon';
 import { Badge } from '@/components/ui/Badge';
 import { useLocale } from '@/context/LocaleContext';
+import { useUser } from '@/context/UserContext';
 import { cn } from '@/lib/utils';
 import type { Problem, ProgressMap } from '@/lib/types';
 
 export default function ProblemsPage() {
+  const router = useRouter();
   const { locale, t } = useLocale();
+  const { username, isReady } = useUser();
   const [problems, setProblems] = useState<Problem[]>([]);
   const [progress, setProgress] = useState<ProgressMap>({});
   const [search, setSearch] = useState('');
@@ -21,13 +25,35 @@ export default function ProblemsPage() {
   const [category, setCategory] = useState('');
 
   useEffect(() => {
-    fetch('/api/problems')
+    let cancelled = false;
+    fetch('/api/problems', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => setProblems(d.problems));
-    fetch('/api/progress')
-      .then((r) => r.json())
-      .then((d) => setProgress(d.progress || {}));
+      .then((d) => {
+        if (!cancelled) setProblems(d.problems);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+    let cancelled = false;
+    setProgress({});
+    if (!username) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetch('/api/progress', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setProgress(d.progress || {});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady, username]);
 
   const solvedCount = Object.values(progress).filter((p) => p.status === 'solved').length;
 
@@ -192,7 +218,7 @@ export default function ProblemsPage() {
                         key={p.id}
                         className="cursor-pointer transition-colors duration-150 hover:bg-[color-mix(in_oklab,var(--accent)_3%,var(--bg-elev))]"
                         style={{ borderTop: '1px solid var(--line)', background: 'var(--bg-elev)' }}
-                        onClick={() => window.location.href = `/problems/${p.id}`}
+                        onClick={() => router.push(`/problems/${p.id}`)}
                       >
                         <td className="px-4 py-3 mono text-[12px] text-text-3 tabular-nums">{String(i + 1).padStart(3, '0')}</td>
                         <td className="px-1 py-3"><StatusIcon status={status} /></td>

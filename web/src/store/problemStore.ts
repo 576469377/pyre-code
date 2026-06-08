@@ -39,6 +39,7 @@ interface ProblemStore {
   setAiHelpLoading: (value: boolean) => void;
   resetAiHelp: () => void;
   resetTestPanel: () => void;
+  resetWorkspace: () => void;
 }
 
 export const useProblemStore = create<ProblemStore>((set) => ({
@@ -88,4 +89,21 @@ export const useProblemStore = create<ProblemStore>((set) => ({
   setAiHelpLoading: (value) => set({ aiHelpLoading: value }),
   resetAiHelp: () => set({ aiHelpResponse: null, aiHelpError: null, aiHelpLoading: false }),
   resetTestPanel: () => set({ bottomTab: 'testcases', selectedCaseIndex: 0, customTests: [], runResult: null, submissionHistory: [] }),
+  resetWorkspace: () => set({
+    currentCode: '',
+    submissionResult: null,
+    isSubmitting: false,
+    drawerOpen: false,
+    bottomTab: 'testcases',
+    selectedCaseIndex: 0,
+    customTests: [],
+    isRunning: false,
+    runResult: null,
+    submissionHistory: [],
+    aiHelpConfigOpen: false,
+    aiHelpCustomPrompt: '',
+    aiHelpResponse: null,
+    aiHelpError: null,
+    aiHelpLoading: false,
+  }),
 }));

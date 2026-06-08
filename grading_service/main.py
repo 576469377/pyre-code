@@ -10,6 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import io
+import ast
+import importlib
 import os
 import threading
 import time
@@ -88,6 +90,99 @@ _SAFE_BUILTINS = {
         "memoryview", "help",
     )
 }
+
+_ALLOWED_IMPORT_ROOTS = {"torch", "numpy", "math", "time"}
+
+
+def _is_allowed_import(module_name: str) -> bool:
+    root = module_name.split(".", 1)[0]
+    return root in _ALLOWED_IMPORT_ROOTS
+
+
+def _restricted_import(
+    name: str,
+    globals: dict[str, Any] | None = None,
+    locals: dict[str, Any] | None = None,
+    fromlist: tuple[str, ...] | list[str] = (),
+    level: int = 0,
+) -> Any:
+    if level != 0:
+        raise ImportError("Relative imports are not allowed")
+    if not _is_allowed_import(name):
+        raise ImportError(f"Import of '{name}' is not allowed")
+    return _builtins.__import__(name, globals, locals, fromlist, level)
+
+
+_SAFE_BUILTINS["__import__"] = _restricted_import
+
+
+def _safe_import_module(module_name: str) -> Any:
+    if not _is_allowed_import(module_name):
+        raise ImportError(f"Import of '{module_name}' is not allowed")
+    return importlib.import_module(module_name)
+
+
+def _safe_import_attr(module_name: str, attr_name: str) -> Any:
+    module = _safe_import_module(module_name)
+    try:
+        return getattr(module, attr_name)
+    except AttributeError as e:
+        raise ImportError(f"Cannot import name '{attr_name}' from '{module_name}'") from e
+
+
+class _ImportRewriter(ast.NodeTransformer):
+    """Rewrite allowed import statements so user builtins do not need __import__."""
+
+    def visit_Import(self, node: ast.Import) -> list[ast.stmt]:
+        rewritten: list[ast.stmt] = []
+        for alias in node.names:
+            if not _is_allowed_import(alias.name):
+                raise ImportError(f"Import of '{alias.name}' is not allowed")
+            bound_name = alias.asname or alias.name.split(".", 1)[0]
+            imported_name = alias.name if alias.asname else bound_name
+            rewritten.append(
+                ast.copy_location(
+                    ast.Assign(
+                        targets=[ast.Name(id=bound_name, ctx=ast.Store())],
+                        value=ast.Call(
+                            func=ast.Name(id="__pyre_import_module__", ctx=ast.Load()),
+                            args=[ast.Constant(value=imported_name)],
+                            keywords=[],
+                        ),
+                    ),
+                    node,
+                )
+            )
+        return rewritten
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> list[ast.stmt]:
+        if node.module is None or node.level:
+            raise ImportError("Relative imports are not allowed")
+        if not _is_allowed_import(node.module):
+            raise ImportError(f"Import of '{node.module}' is not allowed")
+
+        rewritten: list[ast.stmt] = []
+        for alias in node.names:
+            if alias.name == "*":
+                raise ImportError("Wildcard imports are not allowed")
+            bound_name = alias.asname or alias.name
+            rewritten.append(
+                ast.copy_location(
+                    ast.Assign(
+                        targets=[ast.Name(id=bound_name, ctx=ast.Store())],
+                        value=ast.Call(
+                            func=ast.Name(id="__pyre_import_attr__", ctx=ast.Load()),
+                            args=[
+                                ast.Constant(value=node.module),
+                                ast.Constant(value=alias.name),
+                            ],
+                            keywords=[],
+                        ),
+                    ),
+                    node,
+                )
+            )
+        return rewritten
 
 # ---------------------------------------------------------------------------
 # Rate limiter (in-memory, per-worker)
@@ -219,9 +314,24 @@ class GradeResponse(BaseModel):
     error: str | None = None
 
 
+def _format_syntax_error(e: SyntaxError) -> str:
+    location = ""
+    if e.lineno is not None:
+        location = f" (line {e.lineno}"
+        if e.offset is not None:
+            location += f", column {e.offset}"
+        location += ")"
+    message = f"Syntax error: {e.msg}{location}"
+    if e.text:
+        line = e.text.rstrip()
+        message += f"\n{line}"
+        if e.offset is not None and e.offset > 0:
+            message += f"\n{' ' * (e.offset - 1)}^"
+    return message
+
+
 def _validate_code(code: str) -> str | None:
     """Return an error message if code contains disallowed top-level statements."""
-    import ast
     allowed = (
         ast.FunctionDef, ast.AsyncFunctionDef,
         ast.ClassDef,
@@ -230,9 +340,9 @@ def _validate_code(code: str) -> str | None:
         ast.Expr,  # top-level expressions / docstrings
     )
     try:
-        tree = ast.parse(code)
+        tree = ast.parse(code, filename="<submitted>")
     except SyntaxError as e:
-        return f"Syntax error: {e}"
+        return _format_syntax_error(e)
     for node in tree.body:
         if not isinstance(node, allowed):
             return f"Only definitions and assignments are allowed at the top level (found: {type(node).__name__})"
@@ -252,11 +362,19 @@ def _execute_tests(code: str, task: dict, test_indices: list[int] | None = None,
         "F": torch.nn.functional,
         "np": __import__("numpy"),
         "math": math,
+        "__pyre_import_module__": _safe_import_module,
+        "__pyre_import_attr__": _safe_import_attr,
     }
     try:
-        _exec_with_timeout(code, user_ns)
+        tree = ast.parse(code)
+        tree = _ImportRewriter().visit(tree)
+        ast.fix_missing_locations(tree)
+        compiled = compile(tree, "<submitted>", "exec")
+        _exec_with_timeout(compiled, user_ns)
     except SyntaxError as e:
-        return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=f"Syntax error: {e}")
+        return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=_format_syntax_error(e))
+    except ImportError as e:
+        return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error=f"ImportError: {e}")
     except _TimeoutError:
         logger.warning("User code definition timed out")
         return GradeResponse(passed=0, total=0, allPassed=False, results=[], totalTimeMs=0.0, error="Code definition timed out")

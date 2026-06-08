@@ -37,12 +37,13 @@ function FlameGlyph() {
 }
 
 export default function WorkspacePage() {
-  const { username } = useUser();
+  const { username, isReady } = useUser();
+  if (!isReady) return null;
   if (!username) return <AuthDialog open={true} />;
-  return <WorkspacePageNew />;
+  return <WorkspacePageNew username={username} />;
 }
 
-function WorkspacePageNew() {
+function WorkspacePageNew({ username }: { username: string }) {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -68,43 +69,53 @@ function WorkspacePageNew() {
   const codeReadyRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     codeReadyRef.current = false;
+    setProblem(null);
     setProblemError(false);
+    setProgress({});
+    setSubmissionHistory([]);
+    setSubmissionResult(null);
+    resetTestPanel();
+    resetAiHelp();
+    setFeedbackResult(null);
 
-    safeFetchJson<Problem & { starterCode?: string }>(`/api/problems/${id}`).then((data) => {
+    safeFetchJson<Problem & { starterCode?: string }>(`/api/problems/${id}`, { cache: 'no-store' }).then((data) => {
+      if (cancelled) return;
       if (!data) {
         setProblemError(true);
         return;
       }
       setProblem(data);
-      const cachedCode = loadCodeDraft(id);
+      const cachedCode = loadCodeDraft(username, id);
       setCurrentCode(cachedCode ?? data.starterCode ?? '');
       codeReadyRef.current = true;
-      setSubmissionResult(null);
-      resetTestPanel();
-      resetAiHelp();
     });
 
-    safeFetchJson<{ problems: Problem[] }>('/api/problems').then((d) => {
-      if (d?.problems) setAllProblems(d.problems);
+    safeFetchJson<{ problems: Problem[] }>('/api/problems', { cache: 'no-store' }).then((d) => {
+      if (!cancelled && d?.problems) setAllProblems(d.problems);
     });
 
-    safeFetchJson<{ progress: ProgressMap }>('/api/progress').then((d) => {
-      setProgress(d?.progress ?? {});
+    safeFetchJson<{ progress: ProgressMap }>('/api/progress', { cache: 'no-store' }).then((d) => {
+      if (!cancelled) setProgress(d?.progress ?? {});
     });
 
-    safeFetchJson<SubmissionHistory[]>(`/api/submissions/${id}`).then((d) => {
-      if (d) setSubmissionHistory(d);
+    safeFetchJson<SubmissionHistory[]>(`/api/submissions/${id}`, { cache: 'no-store' }).then((d) => {
+      if (!cancelled && d) setSubmissionHistory(d);
     });
 
     if (pathId) {
-      safeFetchJson<Omit<LearningPath, 'problems'> & { problems: LearningPathProblemSummary[] }>(`/api/paths/${pathId}`).then((d) => {
-        if (d) setPathData(d);
+      safeFetchJson<Omit<LearningPath, 'problems'> & { problems: LearningPathProblemSummary[] }>(`/api/paths/${pathId}`, { cache: 'no-store' }).then((d) => {
+        if (!cancelled && d) setPathData(d);
       });
     } else {
       setPathData(null);
     }
-  }, [id, pathId, setCurrentCode, setSubmissionResult, resetTestPanel, resetAiHelp, setSubmissionHistory]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, pathId, username, setCurrentCode, setSubmissionResult, resetTestPanel, resetAiHelp, setSubmissionHistory]);
 
   // Keyboard shortcuts: [ / ] for prev/next problem, Esc to close drawer.
   useEffect(() => {
@@ -147,13 +158,13 @@ function WorkspacePageNew() {
 
   useEffect(() => {
     if (!codeReadyRef.current) return;
-    saveCodeDraft(id, currentCode);
-  }, [id, currentCode]);
+    saveCodeDraft(username, id, currentCode);
+  }, [id, username, currentCode]);
 
   const handleCodeChange = useCallback((code: string) => {
     setCurrentCode(code);
-    localStorage.setItem(`pyre_code_${id}`, code);
-  }, [id, setCurrentCode]);
+    saveCodeDraft(username, id, code);
+  }, [id, username, setCurrentCode]);
 
   const handleRun = async () => {
     if (!problem || isRunning) return;
@@ -191,10 +202,10 @@ function WorkspacePageNew() {
       setRunResult(data);
       setBottomTab('testresults');
       setFeedbackResult(data);
-      safeFetchJson<{ progress: ProgressMap }>('/api/progress').then((d) => {
+      safeFetchJson<{ progress: ProgressMap }>('/api/progress', { cache: 'no-store' }).then((d) => {
         setProgress(d?.progress ?? {});
       });
-      safeFetchJson<SubmissionHistory[]>(`/api/submissions/${id}`).then((d) => {
+      safeFetchJson<SubmissionHistory[]>(`/api/submissions/${id}`, { cache: 'no-store' }).then((d) => {
         if (d) setSubmissionHistory(d);
       });
     } catch {

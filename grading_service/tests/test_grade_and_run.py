@@ -12,6 +12,49 @@ def test_grade_correct_solution_passes_all(client):
     assert body["error"] is None
 
 
+def test_grade_accepts_frontend_starter_imports(client):
+    code = """import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+def relu(x):
+    return F.relu(x)
+"""
+    resp = client.post("/grade", json={"taskId": "relu", "code": code})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["allPassed"] is True
+    assert body["error"] is None
+
+
+def test_run_accepts_nn_module_user_code(client):
+    code = """import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+class MyDropout(nn.Module):
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        if not self.training or self.p == 0:
+            return x
+        mask = (torch.rand_like(x) > self.p).float()
+        return x * mask / (1 - self.p)
+"""
+    resp = client.post(
+        "/run",
+        json={"taskId": "dropout", "code": code, "testIndices": [1]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["allPassed"] is True
+    assert body["error"] is None
+
+
 def test_grade_missing_function_returns_error(client):
     resp = client.post("/grade", json={"taskId": "relu", "code": "def other(x): return x"})
     assert resp.status_code == 200

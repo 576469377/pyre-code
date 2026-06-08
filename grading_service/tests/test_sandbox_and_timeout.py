@@ -2,7 +2,7 @@
 import pytest
 
 
-@pytest.mark.parametrize("forbidden", ["__import__", "open", "eval", "exec", "compile"])
+@pytest.mark.parametrize("forbidden", ["open", "eval", "exec", "compile"])
 def test_forbidden_builtins_unavailable_in_user_code(client, forbidden):
     code = f"def relu(x):\n    {forbidden}\n    return x"
     resp = client.post("/grade", json={"taskId": "relu", "code": code})
@@ -41,3 +41,29 @@ def test_test_code_timeout_surfaces_per_test(monkeypatch, app_module):
     assert len(result.results) == 1
     assert result.results[0].passed is False
     assert "timed out" in (result.results[0].error or "").lower()
+
+
+def test_disallowed_import_is_rejected(client):
+    code = """import os
+def relu(x):
+    return x
+"""
+    resp = client.post("/grade", json={"taskId": "relu", "code": code})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["error"] is not None
+    assert "ImportError" in body["error"]
+    assert "not allowed" in body["error"]
+
+def test_direct_restricted_import_rejects_disallowed_module(client):
+    code = """_x = __import__('os')
+def relu(x):
+    return x
+"""
+    resp = client.post("/grade", json={"taskId": "relu", "code": code})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["error"] is not None
+    assert "ImportError" in body["error"]
+    assert "not allowed" in body["error"]
+

@@ -9,6 +9,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useLocale } from '@/context/LocaleContext';
+import { useUser } from '@/context/UserContext';
 import { cn } from '@/lib/utils';
 import type { LearningPath } from '@/lib/types';
 
@@ -29,13 +30,22 @@ type PathDetail = Omit<LearningPath, 'problems'> & {
 export default function PathDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { locale, t } = useLocale();
+  const { username, isReady } = useUser();
   const [path, setPath] = useState<PathDetail | null>(null);
 
   useEffect(() => {
-    fetch(`/api/paths/${id}`)
+    if (!isReady) return;
+    let cancelled = false;
+    setPath(null);
+    fetch(`/api/paths/${id}`, { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => setPath(d));
-  }, [id]);
+      .then((d) => {
+        if (!cancelled) setPath(d);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isReady, username]);
 
   if (!path) {
     return (

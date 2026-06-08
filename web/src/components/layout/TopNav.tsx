@@ -55,7 +55,7 @@ export function TopNav({ solvedCount, totalCount }: TopNavProps) {
 
   const handleLogout = () => {
     logout();
-    router.refresh();
+    router.replace('/');
   };
 
   return (

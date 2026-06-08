@@ -6,19 +6,29 @@ import { ArrowRight } from 'lucide-react';
 import { TopNav } from '@/components/layout/TopNav';
 import { Footer } from '@/components/layout/Footer';
 import { useLocale } from '@/context/LocaleContext';
+import { useUser } from '@/context/UserContext';
 import type { LearningPath } from '@/lib/types';
 
 type PathWithProgress = LearningPath & { solved: number; total: number };
 
 export default function PathsPage() {
   const { locale, t } = useLocale();
+  const { username, isReady } = useUser();
   const [paths, setPaths] = useState<PathWithProgress[]>([]);
 
   useEffect(() => {
-    fetch('/api/paths')
+    if (!isReady) return;
+    let cancelled = false;
+    setPaths([]);
+    fetch('/api/paths', { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d) => setPaths(d.paths ?? []));
-  }, []);
+      .then((d) => {
+        if (!cancelled) setPaths(d.paths ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady, username]);
 
   return (
     <div className="min-h-screen bg-bg">
